@@ -19,6 +19,21 @@ DOMAIN="https://vla.yilong-zhu.com"
 SITE_DIR="docs/site"
 
 MODE="${1:-deploy}"
+case "$MODE" in
+    deploy|--build|--verify) ;;
+    *)
+        echo "Usage: $0 [--build|--verify]" >&2
+        exit 2
+        ;;
+esac
+
+sha256_file() {
+    python3 -c 'import hashlib, pathlib, sys; print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())' "$1"
+}
+
+sha256_stdin() {
+    python3 -c 'import hashlib, sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'
+}
 
 echo "==> Building site"
 python3 docs/build_site.py
@@ -43,8 +58,9 @@ if [ "$MODE" != "--verify" ]; then
 fi
 
 echo
-echo "==> Waiting 45s for the edge to pick up the new deployment"
-sleep 45
+VERIFY_WAIT_SECONDS="${VERIFY_WAIT_SECONDS:-45}"
+echo "==> Waiting ${VERIFY_WAIT_SECONDS}s for the edge to pick up the new deployment"
+sleep "$VERIFY_WAIT_SECONDS"
 
 echo "==> Byte-comparing every page against $DOMAIN"
 # Cloudflare Pages 308-redirects /foo.html -> /foo, so compare against the
@@ -55,12 +71,12 @@ for f in "$SITE_DIR"/*.html; do
     base="$(basename "$f" .html)"
     url="$DOMAIN/$base"
     [ "$base" = "index" ] && url="$DOMAIN/"
-    local_md5="$(md5sum "$f" | cut -d' ' -f1)"
-    live_md5="$(curl -sL --compressed --max-time 45 "$url" | md5sum | cut -d' ' -f1)"
-    if [ "$local_md5" = "$live_md5" ]; then
+    local_sha256="$(sha256_file "$f")"
+    live_sha256="$(curl --fail --silent --show-error --location --compressed --max-time 45 "$url" | sha256_stdin)"
+    if [ "$local_sha256" = "$live_sha256" ]; then
         echo "  ok   $base"
     else
-        echo "  DIFF $base  (local=$local_md5 live=$live_md5)"
+        echo "  DIFF $base  (local=$local_sha256 live=$live_sha256)"
         fail=$((fail + 1))
     fi
 done

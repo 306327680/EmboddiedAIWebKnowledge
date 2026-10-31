@@ -1,6 +1,6 @@
 # Robotics Knowledge Base
 
-机器人模型架构知识库 —— VLA、全身控制、3D 视觉与 VLM 的架构详解。
+机器人模型架构知识库 —— VLA、世界模型与 WAM、全身控制、3D 视觉与 VLM 的架构详解。
 
 **线上地址：** https://vla.yilong-zhu.com/
 
@@ -10,12 +10,17 @@
 ## 快速开始
 
 ```bash
-# 依赖（只有两个）
-pip install markdown pygments
+# Python 3.11+；依赖安装在项目自己的环境中
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
 
 # 本地构建，不部署
 ./deploy.sh --build
 # 然后浏览器打开 docs/site/index.html
+
+# 回归测试
+python -m unittest discover -s tests
 
 # 构建 + 部署到线上
 ./deploy.sh
@@ -33,10 +38,16 @@ docs/
   01.Pi0_Architecture.md          源文件 —— 改这些
   ...
   20.Isaac-GR00T-N1.7_Architecture.md
+  21.Dyna-Deployment-Flywheel_Architecture.md
+  22.Helix_Architecture.md
+  23.Skild-S1_Architecture.md
+  24.OpenWAM_Architecture.md       世界模型与 WAM：OpenWAM 架构
   build_site.py                   生成器：模板、CSS、侧栏、页面注册表
   site/                           构建产物，git 忽略，每次构建整体覆盖
 deploy.sh                         构建 + 部署
 wrangler.toml                     Cloudflare Pages 项目配置
+requirements.txt                  已验证的 Python 构建依赖
+tests/                            生成器与部署脚本回归测试
 ```
 
 **`docs/site/` 不进 git，也不要手改** —— 每次 `./deploy.sh` 都会整体重新生成。
@@ -44,19 +55,76 @@ md 文件才是唯一来源。
 
 ## 新增一篇文档
 
-两步，缺第二步不会上线：
+新增源文件后，需要登记导航、领域和日期信息：
 
-1. 在 `docs/` 下建 `NN.名字_Architecture.md`，序号决定侧栏顺序。
+1. 在 `docs/` 下建 `NN.名字_Architecture.md`，序号用于保持文件名稳定。
 2. 在 [`docs/build_site.py`](docs/build_site.py) 的 `SECTIONS` 里注册一行：
 
 ```python
-{"file": "21.你的文档.md", "label": "侧栏显示名"},
+{"file": "25.你的文档.md", "label": "侧栏显示名"},
 ```
 
-`SECTIONS` 是分类到页面的映射，决定侧栏分组、首页卡片分区、以及页面之间的导航顺序。
+`SECTIONS` 是分类到页面的映射，**声明顺序**决定侧栏分组、首页卡片分区、以及页面之间的导航顺序，而不是文件名前的数字。
 一个页面可以带 `children`，会在侧栏缩进显示、在首页归到父卡片之后。
 
-然后 `./deploy.sh`。
+3. 在 `PAGE_TOPICS` 中登记已有的领域标签，在 `PAGE_DATES` 中登记年月及一手来源：
+
+```python
+"25.你的文档.md": {
+    "month": "2026-10",  # YYYY-MM；不使用本地文件修改时间
+    "kind": "论文首发",  # 也可标明模型、版本、项目或文章发布
+    "source": "https://example.com/official-paper",
+    "note": "可选：说明论文、开源和后续版本的日期区别。",
+},
+```
+
+Overview 的知识导图和领域筛选依赖这些登记信息；缺失日期或领域会使构建报错。
+日期表示所述方法或版本的首次公开年月，不是知识库文章更新时间。
+然后运行 `./deploy.sh --build` 检查，需要上线时再运行 `./deploy.sh`。
+
+## 日常维护：预览、推送与发布
+
+GitHub 保存源码，Cloudflare Pages 托管生成后的网页，两者分别操作：
+
+1. 激活上面的 Python 环境，修改 `docs/*.md`；新增页面还需登记导航、领域与日期。
+2. 运行 `./deploy.sh --build`，打开 `docs/site/index.html` 检查内容、图表和导航。
+3. 提交并推送到 GitHub。功能分支可以先发 Pull Request，审阅后合并到 `main`。
+4. 从准备发布的版本运行 `./deploy.sh --verify`，构建并发布生产站点，然后逐页校验。
+
+```bash
+# 功能分支示例；先确认 git diff 里是本次要发布的改动
+git switch -c docs/your-topic
+./deploy.sh --build
+git diff --check
+git add docs/你的文档.md docs/build_site.py
+git commit -m "docs: update model architecture"
+git push -u origin docs/your-topic
+```
+
+首次推送需要本机可用的 GitHub 登录凭据；首次发布需要 `npx wrangler login`。
+`./deploy.sh --verify` **会先发布生产站点**，不是只读检查；本地检查使用 `--build`。
+发布脚本固定上传到生产分支 `main`，所以即使从功能分支执行也会更新正式网站。
+
+若以后需要“推送 `main` 自动上线”，可以保留当前 Direct Upload 项目，增加 GitHub Actions：
+安装 `requirements.txt` → 运行 `./deploy.sh --build` → 使用 `cloudflare/wrangler-action@v4` 执行
+`pages deploy docs/site --project-name=vla-model-architecture --branch=main`。
+这需要在仓库 Actions secrets 中设置 `CLOUDFLARE_API_TOKEN`（目标账户的 Cloudflare Pages Edit 权限）和
+`CLOUDFLARE_ACCOUNT_ID`。当前仓库没有启用这个自动发布工作流。
+参考 [Cloudflare 官方 CI 指南](https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/)。
+
+## 公开访问统计
+
+首页与全部文章页底部显示「本站浏览」「本站访客」「本页浏览」，使用
+[原版不蒜子](https://ibruce.info/2015/04/04/busuanzi/)的共享计数服务，无需账户或 API 密钥。
+样式和加载逻辑统一放在 `docs/build_site.py`，重新构建并发布后生效。
+
+- 只有 `https://vla.yilong-zhu.com` 加载计数脚本；本地文件、localhost 与 Pages 预览域名不计数。
+- 统计异步加载，不阻塞正文。服务不可用时显示「—」及「统计暂不可用」，不会把失败伪装成 0。
+- 数字按统计服务的口径累计；访客数是服务去重后的估计，不等于精确人数，也不能补回接入前的历史流量。
+- 这是第三方公开计数，不提供站长私有的趋势与来源分析。若另需后台分析，可以在 Cloudflare Pages
+  项目中启用 Web Analytics；注意自动注入脚本可能影响 `--verify` 的整页字节比较。
+
+如以后迁移正式域名，需要同步修改模板中的 hostname 判断，避免把新站或预览站计入当前统计。
 
 ## 写作约定
 
@@ -87,6 +155,6 @@ Cloudflare Pages 项目 `vla-model-architecture`，**Direct Upload 模式**。
 
 ## 关于 `build_site.py` 的一个提醒
 
-`build_cards()` 里清理简介的那串 `.replace()` 调用含一个 **U+E000 私用区哨兵字符**，
+`extract_summary()` 通过 `ESCAPED_ASTERISK_SENTINEL` 使用 **U+E000 私用区哨兵字符**，
 用来在剥离 `*` 之前保护转义过的星号（比如 `π\*₀.₆`）。
 它在编辑器里可能显示为空或乱码 —— **这是有意的，别"顺手修好"**。
