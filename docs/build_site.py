@@ -1191,7 +1191,7 @@ TEMPLATE = """\
                 <span>本页浏览<strong class="site-stats-number" id="busuanzi_value_page_pv" data-stat-value>—</strong>次</span>
             </div>
             <div class="site-stats-meta">
-                <span>统计由 <a href="https://busuanzi.ibruce.info/" target="_blank" rel="noopener noreferrer">不蒜子</a> 提供</span>
+                <span>统计由 <a href="https://github.com/soxft/busuanzi" target="_blank" rel="noopener noreferrer">不蒜子（soxft）</a> 提供</span>
                 <span class="site-stats-status" role="status" aria-live="polite">统计加载中</span>
             </div>
         </footer>
@@ -1595,7 +1595,8 @@ TEMPLATE = """\
 
             const script = document.createElement('script');
             script.async = true;
-            script.src = 'https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js';
+            script.src = 'https://busuanzi.9420.ltd/js';
+            script.setAttribute('data-prefix', 'busuanzi_value');
             script.onerror = unavailable;
             document.head.appendChild(script);
         }})();
