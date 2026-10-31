@@ -115,8 +115,11 @@ git push -u origin docs/your-topic
 ## 公开访问统计
 
 首页与全部文章页底部显示「本站浏览」「本站访客」「本页浏览」，使用
-[原版不蒜子](https://ibruce.info/2015/04/04/busuanzi/)的共享计数服务，无需账户或 API 密钥。
+[soxft 开源不蒜子](https://github.com/soxft/busuanzi)的公共计数服务，无需账户或 API 密钥。
 样式和加载逻辑统一放在 `docs/build_site.py`，重新构建并发布后生效。
+
+脚本使用 `https://busuanzi.9420.ltd/js`，通过 `data-prefix="busuanzi_value"` 兼容页面现有的计数标签。
+该服务独立于原版不蒜子，历史计数不会自动继承；此次切换用于解决原接口持续超时的问题。
 
 - 只有 `https://vla.yilong-zhu.com` 加载计数脚本；本地文件、localhost 与 Pages 预览域名不计数。
 - 统计异步加载，不阻塞正文。服务不可用时显示「—」及「统计暂不可用」，不会把失败伪装成 0。
