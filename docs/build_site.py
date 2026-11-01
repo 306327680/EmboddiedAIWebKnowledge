@@ -54,6 +54,13 @@ SECTIONS = [
         ],
     },
     {
+        "title": "Egocentric / 第一视角学习",
+        "desc": "从人类第一视角示范学习空间交互表示与跨本体机器人策略",
+        "pages": [
+            {"file": "egocentric/25.HumanEgo_Architecture.md", "label": "HumanEgo"},
+        ],
+    },
+    {
         "title": "全身控制 (WBC)",
         "desc": "人形机器人全身控制与运动生成",
         "pages": [
@@ -192,6 +199,11 @@ PAGE_DATES = {
         "source": "https://arxiv.org/abs/2609.07398",
         "note": "OpenWAM-Infra、Study 与 α；按论文公开年月标注。",
     },
+    "egocentric/25.HumanEgo_Architecture.md": {
+        "month": "2026-05", "kind": "论文首发",
+        "source": "https://arxiv.org/abs/2605.24934",
+        "note": "v1 于 2026.05 首发；代码与数据于 2026.06 发布，论文 v3 于 2026.09 更新。",
+    },
 }
 
 # Cross-cutting knowledge domains used by the overview knowledge map. Pages can
@@ -291,6 +303,7 @@ PAGE_TOPICS = {
     },
     "13.DreamZero_Architecture.md": {"foundation", "imitation", "generative"},
     "24.OpenWAM_Architecture.md": {"foundation", "imitation", "generative", "perception"},
+    "egocentric/25.HumanEgo_Architecture.md": {"imitation", "generative", "perception"},
     "14.FastWAM_Architecture.md": {"foundation", "imitation", "generative"},
     "15.GR00T-WBC_Overview.md": {"reinforcement", "control", "deployment"},
     "16.Decoupled-WBC_Architecture.md": {"reinforcement", "control", "deployment"},
@@ -344,6 +357,7 @@ KNOWLEDGE_PATH_STAGES = [
             ("Flow / Diffusion", "连续动作生成", "01.Pi0_Architecture.html"),
             ("RL / Online", "经验 · 奖励 · 修正", "04.Pi-Star-0.6_Architecture.html"),
             ("Token / 序列", "FAST · FSQ · VQ", "03.Pi0-FAST_Architecture.html"),
+            ("Egocentric", "人类示范 · ICT · 跨本体", "25.HumanEgo_Architecture.html"),
         ],
     },
     {
@@ -400,9 +414,18 @@ def iter_pages(sections=None):
 
 
 def html_filename(markdown_filename: str) -> str:
-    """Return the output filename for a registered Markdown source."""
+    """Accept a canonical relative source path and keep published HTML flat."""
+    if not isinstance(markdown_filename, str) or not markdown_filename:
+        raise ValueError(f"invalid Markdown filename: {markdown_filename!r}")
     path = Path(markdown_filename)
-    if path.name != markdown_filename or path.suffix.lower() != ".md":
+    if (
+        path.is_absolute()
+        or "\\" in markdown_filename
+        or re.match(r"^[A-Za-z]:", markdown_filename)
+        or any(part in ("", ".", "..") for part in markdown_filename.split("/"))
+        or path.as_posix() != markdown_filename
+        or path.suffix.lower() != ".md"
+    ):
         raise ValueError(f"invalid Markdown filename: {markdown_filename!r}")
     return path.with_suffix(".html").name
 
@@ -415,6 +438,9 @@ def validate_sections(sections=None, md_dir: Path = MD_DIR) -> None:
 
     errors = []
     seen = set()
+    # The overview is generated separately; no article may overwrite it.
+    output_sources = {"index.html": "generated overview"}
+    source_root = md_dir.resolve()
     for page, section, _depth in iter_pages(sections):
         filename = page.get("file")
         label = page.get("label")
@@ -422,20 +448,36 @@ def validate_sections(sections=None, md_dir: Path = MD_DIR) -> None:
             errors.append(f"{section.get('title', '<untitled>')}: page has no filename")
             continue
         try:
-            html_filename(filename)
+            output_filename = html_filename(filename)
         except ValueError as exc:
             errors.append(str(exc))
             continue
         if filename in seen:
             errors.append(f"duplicate page registration: {filename}")
         seen.add(filename)
+        # Case-fold so a build on a case-insensitive filesystem cannot silently
+        # overwrite a differently-cased basename from another source folder.
+        output_key = output_filename.casefold()
+        previous_source = output_sources.get(output_key)
+        if previous_source is not None and previous_source != filename:
+            errors.append(
+                f"duplicate output filename: {output_filename} "
+                f"({previous_source}, {filename})"
+            )
+        else:
+            output_sources[output_key] = filename
         if not isinstance(label, str) or not label.strip():
             errors.append(f"{filename}: label must be a non-empty string")
-        if not (md_dir / filename).is_file():
+        source_path = md_dir / filename
+        if not source_path.resolve().is_relative_to(source_root):
+            errors.append(f"Markdown source escapes docs directory: {filename}")
+        elif not source_path.is_file():
             errors.append(f"missing Markdown source: {filename}")
 
     source_files = {
-        path.name for path in md_dir.glob("*.md") if re.match(r"^\d+\.", path.name)
+        path.relative_to(md_dir).as_posix()
+        for path in md_dir.rglob("*")
+        if path.is_file() and path.suffix.lower() == ".md" and re.match(r"^\d+\.", path.name)
     }
     for filename in sorted(source_files - seen):
         errors.append(f"unregistered Markdown source: {filename}")
@@ -2573,14 +2615,15 @@ def render_site(output_dir: Path, sections=None, md_dir: Path = MD_DIR) -> int:
     # Keep already-shared links alive: map every pre-numbering URL to its new one.
     rules = []
     for page, _section, _depth in iter_pages(sections):
-        new_stem = page["file"][:-len(".md")]
+        new_stem = html_filename(page["file"])[:-len(".html")]
         old_stem = re.sub(r"^\d+\.", "", new_stem)
         if old_stem == new_stem:
             continue
         rules.append(f"/{old_stem} /{new_stem} 301")
         rules.append(f"/{old_stem}.html /{new_stem} 301")
     # Preserve the OpenWAM URL used in the initial local review.
-    if any(page["file"] == "24.OpenWAM_Architecture.md" for page, _, _ in iter_pages(sections)):
+    if any(html_filename(page["file"]) == "24.OpenWAM_Architecture.html"
+           for page, _, _ in iter_pages(sections)):
         rules.append("/21.OpenWAM_Architecture /24.OpenWAM_Architecture 301")
         rules.append("/21.OpenWAM_Architecture.html /24.OpenWAM_Architecture 301")
     (output_dir / "_redirects").write_text("\n".join(rules) + "\n", encoding="utf-8")
