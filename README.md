@@ -1,11 +1,13 @@
 # Robotics Knowledge Base
 
-机器人模型架构知识库 —— VLA、世界模型与 WAM、全身控制、3D 视觉与 VLM 的架构详解。
+机器人模型架构知识库 —— VLA、世界模型与 WAM、第一视角数据、全身控制、3D 视觉与 VLM 的架构详解。
 
 **线上地址：** https://vla.yilong-zhu.com/
 
-一个静态站点生成器：把 `docs/*.md` 编译成自包含的 HTML，部署到 Cloudflare Pages。
+一个静态站点生成器：把 `docs/` 下所有登记的 Markdown 文章（含分类子目录）编译成 HTML，部署到 Cloudflare Pages。
 没有 node 依赖树、没有前端框架 —— 一个 Python 脚本 + 两个 CDN 引入的库（mermaid、KaTeX）。
+
+贡献入口：[CONTRIBUTING](CONTRIBUTING.md) · [文章维护 SOP](docs/ARTICLE_SOP.md)。
 
 ## 快速开始
 
@@ -42,8 +44,12 @@ docs/
   22.Helix_Architecture.md
   23.Skild-S1_Architecture.md
   24.OpenWAM_Architecture.md       世界模型与 WAM：OpenWAM 架构
+  egocentric/                     第一视角数据与方法文章
+    25.HumanEgo_Architecture.md
+  ARTICLE_SOP.md                  文章写作、登记、检查与发布步骤
   build_site.py                   生成器：模板、CSS、侧栏、页面注册表
   site/                           构建产物，git 忽略，每次构建整体覆盖
+CONTRIBUTING.md                   贡献与 PR 流程
 deploy.sh                         构建 + 部署
 wrangler.toml                     Cloudflare Pages 项目配置
 requirements.txt                  已验证的 Python 构建依赖
@@ -55,48 +61,50 @@ md 文件才是唯一来源。
 
 ## 新增一篇文档
 
-新增源文件后，需要登记导航、领域和日期信息：
+新增源文件后，需要登记导航、领域和日期信息。完整流程见[文章维护 SOP](docs/ARTICLE_SOP.md)。
 
-1. 在 `docs/` 下建 `NN.名字_Architecture.md`，序号用于保持文件名稳定。
+1. 在 `docs/` 或分类子目录下建 `NN.名字_Architecture.md`，例如 `docs/egocentric/25.HumanEgo_Architecture.md`。序号用于保持文件名稳定，所有目录中的文件 basename 必须唯一。
 2. 在 [`docs/build_site.py`](docs/build_site.py) 的 `SECTIONS` 里注册一行：
 
 ```python
-{"file": "25.你的文档.md", "label": "侧栏显示名"},
+{"file": "egocentric/25.HumanEgo_Architecture.md", "label": "HumanEgo"},
 ```
 
 `SECTIONS` 是分类到页面的映射，**声明顺序**决定侧栏分组、首页卡片分区、以及页面之间的导航顺序，而不是文件名前的数字。
 一个页面可以带 `children`，会在侧栏缩进显示、在首页归到父卡片之后。
+分类子目录用于组织源码；侧栏类别由 `SECTIONS` 决定，不会按目录自动生成。
 
-3. 在 `PAGE_TOPICS` 中登记已有的领域标签，在 `PAGE_DATES` 中登记年月及一手来源：
+3. `PAGE_TOPICS` 和 `PAGE_DATES` 也使用同一完整相对路径作为键。先在 `PAGE_TOPICS` 登记已有领域 ID（可多选），再在 `PAGE_DATES` 登记核实后的年月及一手来源。日期字段示意如下，填写时替换为真实信息：
 
 ```python
-"25.你的文档.md": {
-    "month": "2026-10",  # YYYY-MM；不使用本地文件修改时间
+"egocentric/25.HumanEgo_Architecture.md": {
+    "month": "YYYY-MM",  # 方法或版本首发年月；不使用本地文件修改时间
     "kind": "论文首发",  # 也可标明模型、版本、项目或文章发布
-    "source": "https://example.com/official-paper",
+    "source": "对应的一手来源 HTTPS 链接",
     "note": "可选：说明论文、开源和后续版本的日期区别。",
 },
 ```
 
 Overview 的知识导图和领域筛选依赖这些登记信息；缺失日期或领域会使构建报错。
 日期表示所述方法或版本的首次公开年月，不是知识库文章更新时间。
+源码可以位于子目录，输出网页仍为扁平文件，例如上述文章生成 `docs/site/25.HumanEgo_Architecture.html`；站内网页链接使用这个输出名。`ARTICLE_SOP.md` 等维护文档不登记为站点文章。
 然后运行 `./deploy.sh --build` 检查，需要上线时再运行 `./deploy.sh`。
 
 ## 日常维护：预览、推送与发布
 
 GitHub 保存源码，Cloudflare Pages 托管生成后的网页，两者分别操作：
 
-1. 激活上面的 Python 环境，修改 `docs/*.md`；新增页面还需登记导航、领域与日期。
+1. 激活上面的 Python 环境，修改 `docs/` 中的文章源文件（可在分类子目录内）；新增页面还需登记导航、领域与日期。
 2. 运行 `./deploy.sh --build`，打开 `docs/site/index.html` 检查内容、图表和导航。
-3. 提交并推送到 GitHub。功能分支可以先发 Pull Request，审阅后合并到 `main`。
-4. 从准备发布的版本运行 `./deploy.sh --verify`，构建并发布生产站点，然后逐页校验。
+3. 提交并推送功能分支到 GitHub，创建 Pull Request，合并到 `main`。
+4. 更新本地 `main` 后运行 `./deploy.sh --verify`，构建并发布生产站点，然后逐页校验。
 
 ```bash
 # 功能分支示例；先确认 git diff 里是本次要发布的改动
 git switch -c docs/your-topic
 ./deploy.sh --build
 git diff --check
-git add docs/你的文档.md docs/build_site.py
+git add docs/分类目录/你的文档.md docs/build_site.py
 git commit -m "docs: update model architecture"
 git push -u origin docs/your-topic
 ```

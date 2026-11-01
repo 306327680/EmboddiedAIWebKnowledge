@@ -48,9 +48,72 @@ class RegistryTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "unregistered Markdown source"):
                 build_site.validate_sections([], md_dir)
 
-    def test_html_filename_only_accepts_plain_markdown_names(self):
+    def test_registry_discovers_unregistered_nested_numbered_sources(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            md_dir = Path(temp_dir)
+            nested = md_dir / "egocentric"
+            nested.mkdir()
+            (nested / "25.Orphan.md").write_text("# Orphan", encoding="utf-8")
+            (nested / "CONTRIBUTING.md").write_text("# Guide", encoding="utf-8")
+            with self.assertRaisesRegex(
+                ValueError, r"unregistered Markdown source: egocentric/25\.Orphan\.md"
+            ):
+                build_site.validate_sections([], md_dir)
+
+    def test_registry_rejects_flat_output_collisions(self):
+        for second_name in ("25.Shared.md", "25.shared.md"):
+            with self.subTest(second_name=second_name), tempfile.TemporaryDirectory() as temp_dir:
+                md_dir = Path(temp_dir)
+                filenames = ["first/25.Shared.md", f"second/{second_name}"]
+                for filename in filenames:
+                    source = md_dir / filename
+                    source.parent.mkdir()
+                    source.write_text("# Shared", encoding="utf-8")
+                sections = [{
+                    "title": "Test", "desc": "Test pages",
+                    "pages": [{"file": name, "label": name} for name in filenames],
+                }]
+                with self.assertRaisesRegex(ValueError, "duplicate output filename"):
+                    build_site.validate_sections(sections, md_dir)
+
+    def test_registry_reserves_the_generated_overview_filename(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            md_dir = Path(temp_dir)
+            (md_dir / "index.md").write_text("# Article", encoding="utf-8")
+            sections = [{
+                "title": "Test", "desc": "Test pages",
+                "pages": [{"file": "index.md", "label": "Article"}],
+            }]
+            with self.assertRaisesRegex(ValueError, "duplicate output filename: index.html"):
+                build_site.validate_sections(sections, md_dir)
+
+    def test_registry_rejects_sources_that_escape_through_a_symlink(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            md_dir = root / "docs"
+            md_dir.mkdir()
+            outside = root / "outside.md"
+            outside.write_text("# Outside", encoding="utf-8")
+            (md_dir / "25.Outside.md").symlink_to(outside)
+            sections = [{
+                "title": "Test", "desc": "Test pages",
+                "pages": [{"file": "25.Outside.md", "label": "Outside"}],
+            }]
+            with self.assertRaisesRegex(ValueError, "source escapes docs directory"):
+                build_site.validate_sections(sections, md_dir)
+
+    def test_html_filename_accepts_canonical_nested_sources_but_keeps_output_flat(self):
         self.assertEqual(build_site.html_filename("01.Example.md"), "01.Example.html")
-        for invalid in ("nested/example.md", "example.txt", "example"):
+        self.assertEqual(
+            build_site.html_filename("egocentric/25.HumanEgo_Architecture.md"),
+            "25.HumanEgo_Architecture.html",
+        )
+        for invalid in (
+            "", "/example.md", "../example.md", "nested/../example.md",
+            "./example.md", "nested/./example.md", "nested//example.md",
+            "nested/example.md/", r"nested\example.md", "C:/example.md",
+            "example.txt", "example",
+        ):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 build_site.html_filename(invalid)
 
@@ -177,6 +240,50 @@ Inline $x_y$.
                         continue
                     target = href.split("#", 1)[0].removeprefix("./")
                     self.assertIn(target, generated, f"{page.name} -> {target}")
+
+    def test_nested_source_renders_flat_with_working_links_and_redirects(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            md_dir = root / "docs"
+            nested_dir = md_dir / "egocentric"
+            nested_dir.mkdir(parents=True)
+            root_name = "01.Pi0_Architecture.md"
+            nested_name = "egocentric/25.HumanEgo_Architecture.md"
+            (md_dir / root_name).write_text(
+                "# Root\n\n[HumanEgo](./25.HumanEgo_Architecture.html)", encoding="utf-8"
+            )
+            (md_dir / nested_name).write_text(
+                "# HumanEgo\n\n[Root](./01.Pi0_Architecture.html)", encoding="utf-8"
+            )
+            sections = [
+                {"title": "Root", "desc": "Root pages", "pages": [
+                    {"file": root_name, "label": "Root"},
+                ]},
+                {"title": "Egocentric", "desc": "First-person learning", "pages": [
+                    {"file": nested_name, "label": "HumanEgo"},
+                ]},
+            ]
+            build_site.validate_sections(sections, md_dir)
+            output_dir = root / "site"
+            self.assertEqual(build_site.render_site(output_dir, sections, md_dir), 2)
+            self.assertTrue((output_dir / "25.HumanEgo_Architecture.html").is_file())
+            self.assertFalse((output_dir / "egocentric").exists())
+
+            index = (output_dir / "index.html").read_text(encoding="utf-8")
+            self.assertIn('href="25.HumanEgo_Architecture.html"', index)
+            self.assertIn('class="nav-group">Egocentric</div>', index)
+            for filename in ("01.Pi0_Architecture.html", "25.HumanEgo_Architecture.html"):
+                page = output_dir / filename
+                source = page.read_text(encoding="utf-8")
+                for href in re.findall(r'href="([^"]+)"', source):
+                    if href.startswith(("#", "http://", "https://")):
+                        continue
+                    target = href.split("#", 1)[0]
+                    self.assertTrue((page.parent / target).is_file(), f"{filename} -> {href}")
+            redirects = (output_dir / "_redirects").read_text(encoding="utf-8")
+            self.assertIn("/HumanEgo_Architecture /25.HumanEgo_Architecture 301\n", redirects)
+            self.assertIn("/HumanEgo_Architecture.html /25.HumanEgo_Architecture 301\n", redirects)
+            self.assertNotIn("/egocentric/", redirects)
 
     def test_stylesheet_filename_changes_with_css_content(self):
         with tempfile.TemporaryDirectory() as temp_dir:
