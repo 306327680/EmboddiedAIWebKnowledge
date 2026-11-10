@@ -48,6 +48,7 @@ SECTIONS = [
         "title": "世界模型与 WAM",
         "desc": "未来观测预测、世界与动作联合建模",
         "pages": [
+            {"file": "26.GR00T-2_Architecture.md", "label": "GR00T 2"},
             {"file": "24.OpenWAM_Architecture.md", "label": "OpenWAM"},
             {"file": "13.DreamZero_Architecture.md", "label": "DreamZero"},
             {"file": "14.FastWAM_Architecture.md", "label": "Fast-WAM"},
@@ -199,6 +200,11 @@ PAGE_DATES = {
         "source": "https://arxiv.org/abs/2609.07398",
         "note": "OpenWAM-Infra、Study 与 α；按论文公开年月标注。",
     },
+    "26.GR00T-2_Architecture.md": {
+        "month": "2026-11", "kind": "白皮书发布",
+        "source": "https://research.nvidia.com/labs/gear/gr00t-2/",
+        "note": "涵盖 GR00T 2 与 Turbo。按白皮书公开年月标注。",
+    },
     "egocentric/25.HumanEgo_Architecture.md": {
         "month": "2026-05", "kind": "论文首发",
         "source": "https://arxiv.org/abs/2605.24934",
@@ -303,6 +309,9 @@ PAGE_TOPICS = {
     },
     "13.DreamZero_Architecture.md": {"foundation", "imitation", "generative"},
     "24.OpenWAM_Architecture.md": {"foundation", "imitation", "generative", "perception"},
+    "26.GR00T-2_Architecture.md": {
+        "foundation", "imitation", "generative", "reinforcement", "control", "deployment",
+    },
     "egocentric/25.HumanEgo_Architecture.md": {"imitation", "generative", "perception"},
     "14.FastWAM_Architecture.md": {"foundation", "imitation", "generative"},
     "15.GR00T-WBC_Overview.md": {"reinforcement", "control", "deployment"},
@@ -368,6 +377,7 @@ KNOWLEDGE_PATH_STAGES = [
         "nodes": [
             ("VLA / ICL", "π 系列 · GR00T · Helix · S1", "23.Skild-S1_Architecture.html"),
             ("WAM", "DreamZero · Fast-WAM · Dyna-2", "13.DreamZero_Architecture.html"),
+            ("GR00T 2", "多视角视频 · 跨本体动作", "26.GR00T-2_Architecture.html"),
         ],
     },
     {
